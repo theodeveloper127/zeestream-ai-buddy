@@ -1,9 +1,9 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-const genAI = new GoogleGenerativeAI("AIzaSyB2MFZWyj_Wn0whFADg1f19G7ELC6HedHU");
+const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
 
 export const getGeminiModel = () => {
-  return genAI.getGenerativeModel({ model: "gemini-pro" });
+  return genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 };
 
 export const generateChatResponse = async (prompt: string, movieContext?: any[]) => {
@@ -11,7 +11,7 @@ export const generateChatResponse = async (prompt: string, movieContext?: any[])
     const model = getGeminiModel();
     
     let enhancedPrompt = prompt;
-    if (movieContext && movieContext.length > 0) {
+    if (movieContext?.length > 0) {
       const movieData = movieContext.map(movie => 
         `${movie.name} (${movie.category}) - ${movie.description}`
       ).join('\n');
@@ -21,9 +21,9 @@ ${movieData}
 
 User question: ${prompt}
 
-Please provide a helpful response. If the user is asking about specific movies, you can reference the ones above. Keep responses concise and friendly.`;
+Please provide a helpful response.`;
     } else {
-      enhancedPrompt = `You are a movie assistant for Zeestream streaming platform. User question: ${prompt}. Please provide a helpful, concise response about movies or streaming.`;
+      enhancedPrompt = `You are a movie assistant for Zeestream. User question: ${prompt}`;
     }
 
     const result = await model.generateContent(enhancedPrompt);
