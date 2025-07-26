@@ -7,8 +7,8 @@ export const ChatButton = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Only show on home page
-  if (location.pathname !== '/') return null;
+  // Hide on chat page
+  if (location.pathname === '/chat') return null;
 
   return (
     <Button

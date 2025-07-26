@@ -36,7 +36,8 @@ export const Navbar = () => {
 
   return (
     <>
-      <nav className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-sm border-b border-border">
+      {/* Desktop Navigation */}
+      <nav className="hidden md:block fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-sm border-b border-border">
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
@@ -48,7 +49,7 @@ export const Navbar = () => {
             </Link>
 
             {/* Desktop Navigation */}
-            <div className="hidden md:flex items-center space-x-8">
+            <div className="flex items-center space-x-8">
               {navItems.map((item) => (
                 <Link
                   key={item.name}
@@ -70,7 +71,6 @@ export const Navbar = () => {
                 variant="ghost"
                 size="sm"
                 onClick={() => setShowSearch(true)}
-                className="hidden md:flex"
               >
                 <Search className="w-4 h-4" />
               </Button>
@@ -88,7 +88,7 @@ export const Navbar = () => {
                       ) : (
                         <User className="w-4 h-4" />
                       )}
-                      <span className="hidden md:inline">{user.displayName || user.email}</span>
+                      <span>{user.displayName || user.email}</span>
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
@@ -106,51 +106,8 @@ export const Navbar = () => {
                   Sign In
                 </Button>
               )}
-
-              {/* Mobile Menu Toggle */}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowMobileMenu(!showMobileMenu)}
-                className="md:hidden"
-              >
-                {showMobileMenu ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-              </Button>
             </div>
           </div>
-
-          {/* Mobile Menu */}
-          {showMobileMenu && (
-            <div className="md:hidden py-4 border-t border-border animate-slide-up">
-              <div className="flex flex-col space-y-4">
-                {navItems.map((item) => (
-                  <Link
-                    key={item.name}
-                    to={item.href}
-                    onClick={() => setShowMobileMenu(false)}
-                    className={`transition-colors duration-200 ${
-                      isActive(item.href)
-                        ? 'text-primary font-medium'
-                        : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    {item.name}
-                  </Link>
-                ))}
-                <Button
-                  variant="ghost"
-                  onClick={() => {
-                    setShowSearch(true);
-                    setShowMobileMenu(false);
-                  }}
-                  className="justify-start"
-                >
-                  <Search className="w-4 h-4 mr-2" />
-                  Search
-                </Button>
-              </div>
-            </div>
-          )}
         </div>
       </nav>
 

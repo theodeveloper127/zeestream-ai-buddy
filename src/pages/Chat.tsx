@@ -99,6 +99,11 @@ const Chat = () => {
       };
 
       setMessages(prev => [...prev, assistantMessage]);
+      
+      // Scroll to new message after a brief delay
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
     } catch (error) {
       console.error('Error generating response:', error);
       const errorMessage: ChatMessage = {

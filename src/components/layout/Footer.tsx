@@ -1,8 +1,48 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Facebook, Twitter, Instagram, Youtube } from 'lucide-react';
+import { Facebook, Twitter, Instagram, Youtube, Mail } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { useToast } from '@/hooks/use-toast';
+import { collection, addDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 export const Footer = () => {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubscribe = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim()) return;
+
+    setLoading(true);
+    try {
+      await addDoc(collection(db, 'subscriptions'), {
+        email: email.trim(),
+        userId: user?.uid || null,
+        subscribedAt: new Date(),
+        status: 'active'
+      });
+
+      toast({
+        title: "Subscribed!",
+        description: "You'll receive updates about new movies and features.",
+      });
+      setEmail('');
+    } catch (error) {
+      toast({
+        title: "Subscription failed",
+        description: "Please try again later.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <footer className="bg-card border-t border-border mt-20">
       <div className="container mx-auto px-4 py-12">
@@ -72,18 +112,36 @@ export const Footer = () => {
             </div>
           </div>
 
-          {/* Legal */}
+          {/* Newsletter */}
           <div className="space-y-4">
-            <h3 className="font-semibold text-foreground">Legal</h3>
+            <h3 className="font-semibold text-foreground">Stay Updated</h3>
+            <p className="text-sm text-muted-foreground">
+              Subscribe to get notified about new movies and features.
+            </p>
+            <form onSubmit={handleSubscribe} className="space-y-2">
+              <Input
+                type="email"
+                placeholder="Enter your email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="text-sm"
+                required
+              />
+              <Button 
+                type="submit" 
+                className="w-full btn-stream text-sm"
+                disabled={loading}
+              >
+                <Mail className="w-4 h-4 mr-2" />
+                {loading ? 'Subscribing...' : 'Subscribe'}
+              </Button>
+            </form>
             <div className="space-y-2 text-sm">
               <Link to="/policy" className="block text-muted-foreground hover:text-primary transition-colors">
                 Privacy Policy
               </Link>
               <Link to="/policy" className="block text-muted-foreground hover:text-primary transition-colors">
                 Terms of Service
-              </Link>
-              <Link to="/policy" className="block text-muted-foreground hover:text-primary transition-colors">
-                Cookie Policy
               </Link>
             </div>
           </div>
