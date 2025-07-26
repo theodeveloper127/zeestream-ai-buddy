@@ -7,6 +7,19 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 
+// Import Firebase Firestore instance
+import { db } from '@/lib/firebase';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+
+// 1. Define the ContactMessage Interface
+interface ContactMessage {
+  name: string;
+  email: string;
+  subject: string;
+  message: string;
+  createdAt: any; // Use 'any' for serverTimestamp type, or Firebase Timestamp type if imported
+}
+
 const Contact = () => {
   const [formData, setFormData] = useState({
     name: '',
@@ -21,15 +34,36 @@ const Contact = () => {
     e.preventDefault();
     setLoading(true);
 
-    // Simulate form submission
-    setTimeout(() => {
+    try {
+      // 3. Send data to Firebase Firestore
+      const newMessage: ContactMessage = {
+        ...formData,
+        createdAt: serverTimestamp(), // Add server-side timestamp
+      };
+
+      // Add a new document to the 'contactMessages' collection
+      // Firestore will automatically create the collection if it doesn't exist
+      await addDoc(collection(db, 'contactMessages'), newMessage);
+
       toast({
         title: "Message sent!",
         description: "Thank you for contacting us. We'll get back to you soon.",
       });
+      
+      // Clear the form after successful submission
       setFormData({ name: '', email: '', subject: '', message: '' });
+
+    } catch (error: any) {
+      // 4. Add error handling
+      console.error("Error sending message to Firestore:", error);
+      toast({
+        title: "Failed to send message",
+        description: `There was an error sending your message: ${error.message}. Please try again.`,
+        variant: "destructive",
+      });
+    } finally {
       setLoading(false);
-    }, 1000);
+    }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {

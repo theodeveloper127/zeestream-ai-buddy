@@ -1,6 +1,32 @@
 import React from 'react';
 import { Helmet } from 'react-helmet-async';
-import { Play, Users, Globe, Zap } from 'lucide-react';
+import { Play, Users, Globe, Zap, ExternalLink } from 'lucide-react';
+
+// --- Developer Data (You can move this to a separate data file if preferred) ---
+const developers = [
+  {
+    name: 'Theo Dev Rwanda',
+    role: 'Full-stack Developer',
+    skills: 'React, Node.js, Firebase, Tailwind CSS, UI/UX',
+    photo: 'https://res.cloudinary.com/ddjprb8uw/image/upload/v1752665622/0J5A1305_3_ykkd9u.jpg', // Replace with Theo's actual photo URL
+    portfolioLink: 'https://www.theomuremyi.com', // Replace with Theo's actual portfolio link
+  },
+  {
+    name: 'Leobeni Mugisha',
+    role: 'Frontend Engineer',
+    skills: 'React, TypeScript, CSS-in-JS, Responsive Design',
+    photo: 'https://res.cloudinary.com/ddjprb8uw/image/upload/v1752740275/WhatsApp_Image_2025-07-17_at_10.11.24_qmlphu.jpg', // Example image
+    portfolioLink: 'https://janesmith.dev', // Replace with Jane's actual portfolio link
+  },
+  {
+    name: 'Samauel Kleber Nishimwe',
+    role: 'Backend Developer',
+    skills: 'Python, Django, PostgreSQL, Cloud Deployments',
+    photo: 'https://res.cloudinary.com/ddjprb8uw/image/upload/v1752740362/WhatsApp_Image_2025-07-17_at_10.14.41_tesdgm.jpg', // Example image
+    portfolioLink: 'https://robertbrown.net', // Replace with Robert's actual portfolio link
+  },
+];
+// --- End Developer Data ---
 
 const About = () => {
   return (
@@ -100,7 +126,7 @@ const About = () => {
         </div>
 
         {/* Mission Section */}
-        <div className="bg-card rounded-xl p-8 text-center">
+        <div className="bg-card rounded-xl p-8 text-center mb-16">
           <h2 className="text-3xl font-bold mb-4">Our Mission</h2>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
             To democratize entertainment by providing universal access to quality movies, 
@@ -108,6 +134,52 @@ const About = () => {
             the way people discover and enjoy cinema.
           </p>
         </div>
+
+        {/* --- Meet Our Developers Section --- */}
+        <div className="py-12">
+          <h2 className="text-3xl md:text-4xl font-bold text-center mb-10">
+            Meet Our <span className="text-gradient">Developers</span>
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {developers.map((dev, index) => (
+              <div
+                key={index}
+                className="relative bg-card rounded-xl overflow-hidden
+                           [box-shadow:0_25px_50px_-12px_rgba(0,0,0,0.7)] /* Custom dark shadow only at bottom */
+                           transform transition-transform duration-300 hover:scale-105
+                           hover:[box-shadow:0_35px_70px_-17px_rgba(0,0,0,0.8)]" /* Enhanced shadow on hover */
+              >
+                {/* Developer Photo */}
+                <img
+                  src={dev.photo}
+                  alt={dev.name}
+                  className="w-full h-80 object-cover" // Fixed height for consistency, object-cover to fill
+                />
+
+                {/* Overlay with Name, Role, Skills, and Portfolio Link (Always visible) */}
+                <div
+                  className="absolute inset-0 bg-black/70 /* Solid semi-transparent background */
+                             flex flex-col justify-end p-6 text-white"
+                >
+                  <h3 className="text-xl font-bold mb-2">{dev.name}</h3>
+                  <p className="text-primary-foreground text-sm font-semibold">{dev.role}</p>
+                  <p className="text-xs text-gray-300 mb-4">{dev.skills}</p>
+                  <a
+                    href={dev.portfolioLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center bg-primary text-primary-foreground 
+                                px-4 py-2 rounded-md font-medium text-sm
+                                hover:bg-primary/90 transition-colors duration-200"
+                  >
+                    Portfolio <ExternalLink className="w-4 h-4 ml-2" />
+                  </a>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        {/* --- End Meet Our Developers Section --- */}
       </div>
     </>
   );

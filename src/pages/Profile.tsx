@@ -4,10 +4,22 @@ import { User, Mail, Calendar, LogOut, Trash2, Edit } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { deleteUser, updateProfile } from 'firebase/auth';
+import { doc, updateDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 
 const Profile = () => {
@@ -25,23 +37,30 @@ const Profile = () => {
 
   const handleUpdateProfile = async () => {
     if (!user) return;
-
     setLoading(true);
     try {
+      // Update Firebase Auth
       await updateProfile(user, {
-        displayName: displayName.trim() || undefined
+        displayName: displayName.trim() || undefined,
       });
-      
+
+      // Update Firestore
+      const userRef = doc(db, 'users', user.uid);
+      await updateDoc(userRef, {
+        displayName: displayName.trim() || null,
+      });
+
       toast({
-        title: "Profile updated",
-        description: "Your profile has been updated successfully.",
+        title: 'Profile updated',
+        description: 'Your profile has been updated successfully.',
       });
+
       setEditing(false);
     } catch (error: any) {
       toast({
-        title: "Update failed",
-        description: error.message,
-        variant: "destructive",
+        title: 'Update failed',
+        description: error.message || 'Something went wrong.',
+        variant: 'destructive',
       });
     } finally {
       setLoading(false);
@@ -50,20 +69,19 @@ const Profile = () => {
 
   const handleDeleteAccount = async () => {
     if (!user) return;
-
     setLoading(true);
     try {
       await deleteUser(user);
       toast({
-        title: "Account deleted",
-        description: "Your account has been permanently deleted.",
+        title: 'Account deleted',
+        description: 'Your account has been permanently deleted.',
       });
       navigate('/');
     } catch (error: any) {
       toast({
-        title: "Delete failed",
-        description: "Failed to delete account. You may need to sign in again.",
-        variant: "destructive",
+        title: 'Delete failed',
+        description: 'You may need to sign in again before deleting your account.',
+        variant: 'destructive',
       });
     } finally {
       setLoading(false);
@@ -105,7 +123,7 @@ const Profile = () => {
                       className="w-16 h-16 rounded-full object-cover"
                     />
                   ) : (
-                    <div className="w-16 h-16 bg-gradient-primary rounded-full flex items-center justify-center">
+                    <div className="w-16 h-16 bg-gradient-to-br from-primary to-secondary rounded-full flex items-center justify-center">
                       <User className="w-8 h-8 text-white" />
                     </div>
                   )}
@@ -129,8 +147,8 @@ const Profile = () => {
                       <Button onClick={handleUpdateProfile} disabled={loading}>
                         Save
                       </Button>
-                      <Button 
-                        variant="outline" 
+                      <Button
+                        variant="outline"
                         onClick={() => {
                           setEditing(false);
                           setDisplayName(user.displayName || '');
@@ -168,10 +186,9 @@ const Profile = () => {
                   <div className="flex items-center space-x-2">
                     <Calendar className="w-4 h-4 text-muted-foreground" />
                     <span className="text-muted-foreground">
-                      {user.metadata.creationTime 
+                      {user.metadata.creationTime
                         ? new Date(user.metadata.creationTime).toLocaleDateString()
-                        : 'Unknown'
-                      }
+                        : 'Unknown'}
                     </span>
                   </div>
                 </div>
@@ -204,7 +221,7 @@ const Profile = () => {
                       Permanently delete your account and all data
                     </p>
                   </div>
-                  
+
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
                       <Button variant="destructive" disabled={loading}>

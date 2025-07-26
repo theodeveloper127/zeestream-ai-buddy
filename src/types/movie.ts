@@ -43,4 +43,7 @@ export interface UserProfile {
   photoURL?: string;
   createdAt: Date;
   likedMovies: string[];
+  role: 'user' | 'admin';
 }
+
+

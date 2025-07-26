@@ -78,7 +78,6 @@ export const SearchModal: React.FC<SearchModalProps> = ({ open, onOpenChange }) 
               onClick={() => onOpenChange(false)}
               className="ml-2 p-1 hover:bg-muted rounded"
             >
-              <X className="w-5 h-5" />
             </button>
           </div>
 
