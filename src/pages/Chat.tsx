@@ -142,9 +142,17 @@ const Chat = () => {
       const aiResponse = await generateChatResponse(userMessageContent, movieContext, chatSession, user?.displayName);
       console.log('AI response received:', aiResponse); // Debug log
 
+      // Clean up markdown symbols from AI response
+      const cleanedText = aiResponse.text
+        .replace(/\*\*/g, '') // Remove bold markdown
+        .replace(/\*/g, '') // Remove italic markdown
+        .replace(/```json\s*```/g, '') // Remove empty json blocks
+        .replace(/```\s*```/g, '') // Remove empty code blocks
+        .trim();
+
       const newAiMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
-        content: aiResponse.text, // Only the friendly text
+        content: cleanedText,
         isUser: false,
         timestamp: new Date(),
         movies: aiResponse.movies || [], // Ensure movies array is defined
@@ -181,21 +189,26 @@ const Chat = () => {
 
   const handlePlayClick = (movie: Movie, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (movie.watchUrl) {
-      window.location.href = movie.watchUrl;
-    } else {
-      toast({
-        title: "No Watch URL",
-        description: "This movie is not available to watch yet.",
-        variant: "destructive",
-      });
-    }
+    navigate(`/watch/${movie.slug}`);
   };
 
   const handleDownloadClick = (movie: Movie, e: React.MouseEvent) => {
     e.stopPropagation();
     if (movie.downloadUrl) {
-      window.location.href = movie.downloadUrl;
+      // Create a temporary link element for auto download
+      const link = document.createElement('a');
+      link.href = movie.downloadUrl;
+      link.download = movie.name || 'movie';
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      toast({
+        title: "Download Started",
+        description: `Downloading ${movie.name}...`,
+        variant: "default",
+      });
     } else {
       toast({
         title: "No Download URL",
