@@ -29,11 +29,34 @@ const developers = [
 // --- End Developer Data ---
 
 const About = () => {
+  const pageTitle = "About Us - Zeestream";
+  const pageDescription = "Learn about Zeestream - your ultimate movie streaming destination. Discover our mission, features, and the team behind the platform.";
+  const pageUrl = window.location.href;
+  const pageImage = "https://placehold.co/1200x630/E0E0E0/333333?text=Zeestream+About"; // Specific image for About page
+
   return (
     <>
       <Helmet>
-        <title>About Us - Zeestream</title>
-        <meta name="description" content="Learn about Zeestream - your ultimate movie streaming destination" />
+        <title>{pageTitle}</title>
+        <meta name="description" content={pageDescription} />
+
+        {/* Open Graph Tags for Social Media */}
+        <meta property="og:title" content={pageTitle} />
+        <meta property="og:description" content={pageDescription} />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content={pageUrl} />
+        <meta property="og:image" content={pageImage} />
+        <meta property="og:site_name" content="Zeestream" />
+
+        {/* Twitter Card Tags */}
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:url" content={pageUrl} />
+        <meta name="twitter:title" content={pageTitle} />
+        <meta name="twitter:description" content={pageDescription} />
+        <meta name="twitter:image" content={pageImage} />
+
+        {/* Canonical Link */}
+        <link rel="canonical" href={pageUrl} />
       </Helmet>
 
       <div className="container mx-auto px-4 py-12">

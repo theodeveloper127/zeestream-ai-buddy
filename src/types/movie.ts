@@ -5,27 +5,19 @@ export interface Movie {
   thumbnailUrl: string;
   type: 'original' | 'translated';
   category: string;
-  likes: number;
+  likes: string[]; // This is the array that stores user UIDs who liked the movie
   comments: Comment[];
   rating: number;
   uploadDate: Date;
   description: string;
   trailerUrl: string;
   isSeries: boolean;
-  parts?: Episode[];
+  relationship: string; // Used to group series or  movies
   comingSoon: boolean;
   releaseDate?: Date;
   translator?: string;
-}
-
-export interface Episode {
-  id: string;
-  title: string;
-  episodeNumber: number;
-  videoUrl: string;
-  thumbnailUrl: string;
-  duration: string;
-  description: string;
+  watchUrl: string;
+  downloadUrl?: string;
 }
 
 export interface Comment {
@@ -45,5 +37,3 @@ export interface UserProfile {
   likedMovies: string[];
   role: 'user' | 'admin';
 }
-
-

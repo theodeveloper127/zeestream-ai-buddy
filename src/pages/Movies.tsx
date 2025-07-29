@@ -1,14 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
-import { Filter, X } from 'lucide-react';
-import { collection, query, orderBy, limit, startAfter, where, getDocs } from 'firebase/firestore';
+import { Filter, X, Play, Download } from 'lucide-react'; // Import Play and Download icons
+import { collection, query, orderBy, limit, startAfter, where, getDocs, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { Movie } from '@/types/movie';
+import { Movie } from '@/types/movie'; // Assuming this correctly points to your updated Movie interface
 import { MovieGrid } from '@/components/movie/MovieGrid';
 import { AuthModal } from '@/components/modals/AuthModal';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { toast } from '@/hooks/use-toast'; // Import toast for notifications
 
 const MOVIES_PER_PAGE = 24;
 
@@ -21,12 +22,45 @@ const Movies = () => {
   const [lastDoc, setLastDoc] = useState<any>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [dynamicCategories, setDynamicCategories] = useState<string[]>([]); // State for dynamic categories
 
   const typeFilter = searchParams.get('type') || 'all';
   const categoryFilter = searchParams.get('category') || 'all';
 
-  const categories = ['all', 'action', 'comedy', 'drama', 'thriller', 'horror', 'romance', 'sci-fi'];
+  // Types are still static as they are fixed enum values
   const types = ['all', 'original', 'translated'];
+
+  const mapMovieDoc = useCallback((doc: any): Movie => {
+    const data = doc.data();
+    return {
+      id: doc.id,
+      name: data.name || '',
+      slug: data.slug || '',
+      thumbnailUrl: data.thumbnailUrl || 'https://placehold.co/200x300/E0E0E0/333333?text=No+Image',
+      type: data.type || 'original',
+      category: data.category || 'Uncategorized',
+      // Ensure likes is an array of strings (user UIDs) for correct count calculation
+      likes: Array.isArray(data.likes) ? data.likes : [],
+      comments: data.comments?.map((comment: any) => ({
+        id: comment.id || '',
+        userId: comment.userId || '',
+        userEmail: comment.userEmail || '',
+        content: comment.content || '',
+        timestamp: comment.timestamp instanceof Timestamp ? comment.timestamp.toDate() : new Date(),
+      })) || [],
+      rating: data.rating || 0,
+      uploadDate: data.uploadDate instanceof Timestamp ? data.uploadDate.toDate() : new Date(),
+      description: data.description || '',
+      trailerUrl: data.trailerUrl || '',
+      isSeries: data.isSeries || false,
+      relationship: data.relationship || '',
+      comingSoon: data.comingSoon || false,
+      releaseDate: data.releaseDate instanceof Timestamp ? data.releaseDate.toDate() : undefined,
+      translator: data.translator || undefined,
+      watchUrl: data.watchUrl || '',
+      downloadUrl: data.downloadUrl || undefined,
+    };
+  }, []);
 
   const updateFilter = (key: string, value: string) => {
     const newParams = new URLSearchParams(searchParams);
@@ -36,6 +70,21 @@ const Movies = () => {
       newParams.set(key, value);
     }
     setSearchParams(newParams);
+  };
+
+  const fetchCategories = async () => {
+    try {
+      const moviesRef = collection(db, 'movies');
+      const q = query(moviesRef, orderBy('category')); // Order by category to help with unique extraction
+      const snapshot = await getDocs(q);
+      const allMovies = snapshot.docs.map(mapMovieDoc);
+      const categories = Array.from(new Set(allMovies.map(movie => movie.category)))
+        .filter(category => category && category.trim() !== '')
+        .sort((a, b) => a.localeCompare(b)); // Sort alphabetically
+      setDynamicCategories(['all', ...categories]); // Add 'all' option
+    } catch (error) {
+      console.error('Error fetching dynamic categories:', error);
+    }
   };
 
   const loadMovies = async (isLoadMore = false) => {
@@ -52,7 +101,6 @@ const Movies = () => {
       const moviesRef = collection(db, 'movies');
       let q = query(moviesRef, orderBy('uploadDate', 'desc'), limit(MOVIES_PER_PAGE));
 
-      // Apply filters
       if (typeFilter !== 'all') {
         q = query(q, where('type', '==', typeFilter));
       }
@@ -60,17 +108,12 @@ const Movies = () => {
         q = query(q, where('category', '==', categoryFilter));
       }
 
-      // Pagination
       if (isLoadMore && lastDoc) {
         q = query(q, startAfter(lastDoc));
       }
 
       const querySnapshot = await getDocs(q);
-      const newMovies: Movie[] = [];
-
-      querySnapshot.forEach((doc) => {
-        newMovies.push({ id: doc.id, ...doc.data() } as Movie);
-      });
+      const newMovies: Movie[] = querySnapshot.docs.map(mapMovieDoc);
 
       if (isLoadMore) {
         setMovies(prev => [...prev, ...newMovies]);
@@ -88,9 +131,45 @@ const Movies = () => {
     }
   };
 
+  // Handler for direct download (reusable)
+  const handleDirectDownload = (url: string | undefined, name: string) => {
+    if (!url) {
+      toast({
+        title: "Download Error",
+        description: "No download URL available for this item.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${name}.mp4`); // Suggest a filename
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast({
+        title: "Download Initiated",
+        description: "Your download should start shortly. If not, check your browser's download settings.",
+      });
+    } catch (error) {
+      console.error('Error initiating download:', error);
+      toast({
+        title: "Download Failed",
+        description: "Could not initiate download. This might be due to external link restrictions.",
+        variant: "destructive",
+      });
+    }
+  };
+
   useEffect(() => {
-    loadMovies();
-  }, [typeFilter, categoryFilter]);
+    fetchCategories(); // Fetch categories once on component mount
+  }, []);
+
+  useEffect(() => {
+    loadMovies(); // Reload movies whenever filters change
+  }, [typeFilter, categoryFilter, mapMovieDoc]);
 
   const loadMore = () => {
     if (!loadingMore && hasMore) {
@@ -106,7 +185,6 @@ const Movies = () => {
       </Helmet>
 
       <div className="container mx-auto px-4 py-8">
-        {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-3xl font-bold mb-2">Movies</h1>
@@ -126,7 +204,6 @@ const Movies = () => {
           </Button>
         </div>
 
-        {/* Filters */}
         <div className={`mb-8 ${showFilters ? 'block' : 'hidden md:block'}`}>
           <div className="flex flex-col md:flex-row gap-4">
             <div className="space-y-2">
@@ -152,7 +229,7 @@ const Movies = () => {
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
-                  {categories.map((category) => (
+                  {dynamicCategories.map((category) => (
                     <SelectItem key={category} value={category}>
                       {category === 'all' ? 'All Categories' : category.charAt(0).toUpperCase() + category.slice(1)}
                     </SelectItem>
@@ -176,14 +253,14 @@ const Movies = () => {
           </div>
         </div>
 
-        {/* Movies Grid */}
+        {/* MovieGrid now receives onDownloadClick prop */}
         <MovieGrid
           movies={movies}
           loading={loading}
           onAuthRequired={() => setShowAuthModal(true)}
+          onDownloadClick={handleDirectDownload} // Pass the direct download handler
         />
 
-        {/* Load More */}
         {hasMore && !loading && (
           <div className="text-center mt-12">
             <Button
@@ -197,7 +274,6 @@ const Movies = () => {
           </div>
         )}
 
-        {/* No movies */}
         {!loading && movies.length === 0 && (
           <div className="text-center py-12">
             <p className="text-muted-foreground">No movies found with current filters.</p>

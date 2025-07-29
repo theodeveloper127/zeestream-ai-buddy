@@ -1,164 +1,168 @@
-// src/lib/gemini.ts
 import { GoogleGenerativeAI, ChatSession } from '@google/generative-ai';
 import { Movie } from '@/types/movie';
-// Assuming ChatMessage is defined in Chat.tsx and exported for type use
-import { ChatMessage } from '@/components/Chat'; 
+import { collection, query, getDocs } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { Timestamp } from 'firebase/firestore';
 
-// Initialize the Google Generative AI with the API key from environment variables
 const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
 
-// Function to get the Generative Model instance
 export const getGeminiModel = () => {
-  return genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  return genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 };
 
-// Define the structure of the AI's response to the UI
 interface AiResponse {
   text: string;
   movies?: Movie[];
-  aiAction?: 'search_movies' | 'general_chat' | 'identity_response'; // AI will decide this now
+  aiAction?: 'search_movies' | 'general_chat' | 'identity_response';
 }
 
-// System instruction to guide the Gemini model's behavior and identity
 const SYSTEM_INSTRUCTION = `
-You are Zee AI, the helpful movie assistant for Zeestream. You were developed by Rwandascratch developer teams.
-Your primary goal is to assist users in finding movies, providing recommendations, and answering questions about Zeestream's content.
+You are Zee AI, the helpful movie assistant for Zeestream, developed by Rwandascratch. Your goal is to assist users with Zeestream-related questions or find movies based on their input.
 
-Here are your capabilities and how you should respond:
-1.  **Identity/Greeting:** If the user asks "who are you", "what are you", "tell me about yourself", or a general greeting like "hi" or "hello", respond as Zee AI.
-    * **For "who are you" / "what are you" / "tell me about yourself":** "I am Zee AI. I'm a computer program designed to process and generate human-like text. I don't have personal experiences, emotions, or a physical body. My knowledge is based on a massive dataset of text and code I was trained on, which includes a vast amount of information from books, articles, websites, and more. I was developed by Rwandascratch to help users with many different information-related tasks."
-    * **For "hi" / "hello":** "Hi there! I'm Zee AI, your personal movie assistant. How can I help you today?"
-    * **For "what can you do":** "I can help you search for movies, recommend something based on your preferences, or provide information about our extensive collection. Just ask!"
+Capabilities:
+1. **Identity/Greeting**: For queries like "who are you", "what is Zeestream", or greetings ("hi"), respond naturally about Zeestream. Example: "Hi [userName]! I'm Zee AI, your Zeestream movie assistant. Ask about our platform or movies!"
+2. **Movie Search**: For movie queries (e.g., "funny sci-fi movie with aliens from 2000s", "movies starting with theo", "coming soon movies", "about theogened"), filter or sort the provided movie JSON based on keywords (genres, themes, actors, decades, title prefix, comingSoon status, or specific titles). Return:
+   - A friendly message (e.g., "Here are some sci-fi comedies!" or "Here's what I know about 'theogened':").
+   - A list of matching movie names (e.g., ["theogened", "theogeneg"]).
+   Do NOT return JSON. Use the movie JSON below to find matches. If no matches, suggest up to 50 recent movies (sorted by uploadDate descending) or say no matches were found (e.g., for comingSoon if none exist).
+3. **General Conversation**: For non-movie Zeestream queries (e.g., "how does Zeestream work"), respond naturally without referencing movies unless asked. Ask follow-up questions if input is vague (e.g., "Any specific genres you like?").
 
-2.  **Movie Search/Recommendation:** If the user asks for movie recommendations, searches for specific movies, or asks "what to watch", you MUST try to suggest movies from the provided 'Movie Context'.
-    * **When suggesting movies, you MUST respond in a JSON format.** This allows the application to display movie cards.
-    * The JSON should have two keys: "type" (always "movies") and "text" (a brief introductory sentence), and "movie_names" (an array of movie names from the context).
-    * **Example JSON response for movie recommendation:**
-        \`\`\`json
-        {
-          "type": "movies",
-          "text": "Here are some movies you might like:",
-          "movie_names": ["The Great Adventure", "Space Odyssey", "Mystery Manor"]
-        }
-        \`\`\`
-    * If you can't find specific movies matching the user's query but they clearly want movies, suggest some popular ones from the context and use the JSON format.
-    * Limit movie suggestions to a maximum of 6.
-
-3.  **General Conversation:** For any other questions or conversation that is not about movies or your identity, respond naturally as a helpful AI assistant. Do NOT use the JSON format for general conversation.
-
-**Movie Context (from Zeestream's database):**
-Below is a list of movies available in our database. Use this information to answer movie-related queries.
+Movie JSON:
+{movieDataForAI}
 `;
 
-// Main function to generate chat responses with custom logic and Gemini SDK integration
 export const generateChatResponse = async (
-  userMessage: string, 
-  movieContext: Movie[], 
-  chatSession: ChatSession // Accepts the SDK's ChatSession for conversational memory
+  userMessage: string,
+  movieContext: Movie[], // Not used directly since we fetch all movies
+  chatSession: ChatSession,
+  userName?: string
 ): Promise<AiResponse> => {
   let aiText = '';
   let moviesToSuggest: Movie[] | undefined = undefined;
-  let aiAction: AiResponse['aiAction'] = 'general_chat'; // Default action
+  let aiAction: AiResponse['aiAction'] = 'general_chat';
 
-  console.log("\n--- generateChatResponse called ---");
-  console.log("User message:", userMessage);
-  console.log("Movie context size:", movieContext.length);
+  // Fetch all movies from Firebase
+  const moviesRef = collection(db, 'movies');
+  const querySnapshot = await getDocs(query(moviesRef));
+  const allMovies: Movie[] = [];
+  querySnapshot.forEach(doc => {
+    const data = doc.data();
+    if (data.releaseDate instanceof Timestamp) {
+      data.releaseDate = data.releaseDate.toDate();
+    }
+    if (data.uploadDate instanceof Timestamp) {
+      data.uploadDate = data.uploadDate.toDate();
+    }
+    allMovies.push({ id: doc.id, ...data } as Movie);
+  });
 
-  // Format movie context for the AI
-  const movieDataForAI = movieContext.map(movie => 
-    `Name: ${movie.name}, Category: ${movie.category}, Description: ${movie.description}`
-  ).join('\n');
+  // Convert movies to JSON for Gemini
+  const movieDataForAI = JSON.stringify(
+    allMovies.map(movie => ({
+      id: movie.id,
+      name: movie.name,
+      slug: movie.slug,
+      thumbnailUrl: movie.thumbnailUrl,
+      type: movie.type,
+      category: movie.category,
+      likes: movie.likes,
+      comments: movie.comments,
+      rating: movie.rating,
+      uploadDate: movie.uploadDate.toISOString(),
+      description: movie.description,
+      trailerUrl: movie.trailerUrl,
+      isSeries: movie.isSeries,
+      relationship: movie.relationship,
+      comingSoon: movie.comingSoon,
+      releaseDate: movie.releaseDate ? movie.releaseDate.toISOString() : undefined,
+      translator: movie.translator,
+      watchUrl: movie.watchUrl,
+      downloadUrl: movie.downloadUrl,
+    })),
+    null,
+    2
+  );
 
-  // Construct the full prompt for Gemini
-  const fullPrompt = `${SYSTEM_INSTRUCTION}
-${movieDataForAI}
-
+  const fullPrompt = `${SYSTEM_INSTRUCTION.replace('{movieDataForAI}', movieDataForAI)}
 User question: ${userMessage}
-
-Please provide your response based on the instructions above.`;
-
-  console.log("Sending prompt to Gemini:\n", fullPrompt);
+Respond with a friendly message and, for movie queries, a list of matching movie names (e.g., ["theogened", "theogeneg"]). Do NOT return JSON. Use [userName] for ${userName || 'user'}.`;
 
   try {
-    // Send the full prompt to the Gemini chat session
     const result = await chatSession.sendMessage(fullPrompt);
     const response = await result.response;
-    const geminiRawText = response.text(); // Get the raw text from the response
+    const geminiRawText = response.text();
 
-    console.log("Raw response from Gemini:", geminiRawText);
+    // Log raw response for debugging
+    console.log('Gemini raw response:', geminiRawText);
 
-    // Attempt to parse the response as JSON for movie recommendations
-    try {
-      const parsedResponse = JSON.parse(geminiRawText);
-      if (parsedResponse.type === "movies" && Array.isArray(parsedResponse.movie_names)) {
-        aiText = parsedResponse.text || "Here are some movies you might like:";
-        const suggestedMovieNames = parsedResponse.movie_names.map((name: string) => name.toLowerCase());
-        
-        // Filter movies from the original movieContext based on names provided by Gemini
-        moviesToSuggest = movieContext.filter(movie => 
-          suggestedMovieNames.includes(movie.name.toLowerCase())
-        ).slice(0, 6); // Ensure we don't exceed 6, even if Gemini suggests more
-
-        if (moviesToSuggest.length === 0 && parsedResponse.movie_names.length > 0) {
-            // If Gemini suggested names but we couldn't match them, fallback to popular
-            aiText = "I couldn't find specific movies matching that, but here are some popular titles you might enjoy from our collection:";
-            moviesToSuggest = movieContext.slice(0, 6);
-        } else if (moviesToSuggest.length === 0 && parsedResponse.movie_names.length === 0) {
-            // If Gemini intended to suggest movies but provided no names, fallback to popular
-            aiText = "I couldn't find specific movies for you, but here are some popular titles you might enjoy from our collection:";
-            moviesToSuggest = movieContext.slice(0, 6);
-        }
-
+    // Check if response is JSON (shouldn't happen, but handle as fallback)
+    if (geminiRawText.trim().startsWith('{')) {
+      console.warn('Unexpected JSON response from Gemini:', geminiRawText);
+      try {
+        const parsedResponse = JSON.parse(geminiRawText);
+        aiText = parsedResponse.text || 'Here are some movies you might like:';
         aiAction = 'search_movies';
-        console.log("Parsed JSON response (movies). aiText:", aiText, "Movies:", moviesToSuggest.map(m => m.name));
-      } else {
-        // Not a movie JSON response, treat as general text
-        aiText = geminiRawText;
-        aiAction = 'general_chat'; // Or 'identity_response' if it matches identity text
-        
-        // Simple check to set aiAction for identity, based on the static text in SYSTEM_INSTRUCTION
-        const lowerCaseAiText = aiText.toLowerCase();
-        if (lowerCaseAiText.includes("i am zee ai") || lowerCaseAiText.includes("hi there! i'm zee ai")) {
-            aiAction = 'identity_response';
+
+        const suggestedMovieNames = (parsedResponse.movie_names || []).map((name: string) => name.toLowerCase());
+        moviesToSuggest = allMovies.filter(movie => suggestedMovieNames.includes(movie.name.toLowerCase())).slice(0, 50);
+
+        if (moviesToSuggest.length === 0) {
+          aiText = parsedResponse.keywords?.comingSoon
+            ? "No upcoming movies found, but here are some recent ones!"
+            : "Couldn't find movies matching that, but here are some recent ones!";
+          moviesToSuggest = allMovies.sort((a, b) => b.uploadDate.getTime() - a.uploadDate.getTime()).slice(0, 50);
         }
-        console.log("Plain text response. aiText:", aiText);
+      } catch (jsonError) {
+        console.error('Error parsing unexpected JSON response:', jsonError);
+        aiText = "Sorry, I couldn't process that movie request. Try asking for specific genres or titles!";
+        aiAction = 'general_chat';
       }
-    } catch (jsonError) {
-      // If JSON parsing fails, it's a plain text response
-      aiText = geminiRawText;
-      aiAction = 'general_chat'; // Or 'identity_response' if it matches identity text
-      
-      // Simple check to set aiAction for identity, based on the static text in SYSTEM_INSTRUCTION
+    } else {
+      // Parse non-JSON response expecting friendly message and optional movie names
+      const lines = geminiRawText.split('\n').map(line => line.trim()).filter(line => line);
+      aiText = lines[0].replace('[userName]', userName || 'there') || 'Here are some movies you might like:';
+      aiAction = 'general_chat';
+
+      // Check for movie names in subsequent lines (e.g., ["theogened", "theogeneg"])
+      let suggestedMovieNames: string[] = [];
+      const movieNamesMatch = geminiRawText.match(/\[".*?"/g);
+      if (movieNamesMatch) {
+        try {
+          suggestedMovieNames = JSON.parse(movieNamesMatch[0]).map((name: string) => name.toLowerCase());
+          aiAction = 'search_movies';
+        } catch (error) {
+          console.error('Error parsing movie names:', error);
+        }
+      }
+
+      if (suggestedMovieNames.length > 0) {
+        moviesToSuggest = allMovies
+          .filter(movie => suggestedMovieNames.includes(movie.name.toLowerCase()))
+          .slice(0, 50);
+      }
+
+      // Handle special cases (e.g., identity or comingSoon with no matches)
       const lowerCaseAiText = aiText.toLowerCase();
-      if (lowerCaseAiText.includes("i am zee ai") || lowerCaseAiText.includes("hi there! i'm zee ai")) {
-          aiAction = 'identity_response';
+      if (lowerCaseAiText.includes('zee ai') || lowerCaseAiText.includes('zeestream')) {
+        aiAction = 'identity_response';
+      } else if (lowerCaseAiText.includes('coming soon') && moviesToSuggest?.length === 0) {
+        aiText = "I'm sorry, but I don't have information about upcoming releases on Zeestream. Try checking the Zeestream website or app directly.";
+      } else if (moviesToSuggest?.length === 0 && aiAction === 'search_movies') {
+        aiText = "Couldn't find movies matching that, but here are some recent ones!";
+        moviesToSuggest = allMovies.sort((a, b) => b.uploadDate.getTime() - a.uploadDate.getTime()).slice(0, 50);
       }
-      console.log("JSON parsing failed, treating as plain text. aiText:", aiText);
     }
 
     if (!aiText) {
-      console.warn("Gemini ChatSession returned no text response after parsing.");
-      aiText = "I couldn't get a specific response from the AI. Please try rephrasing.";
+      aiText = "Sorry, I couldn't process that. Try asking about Zeestream or movies!";
     }
-
   } catch (error) {
-      console.error("Error with Gemini response via ChatSession:", error);
-      aiText = "I'm sorry, I'm having trouble with the AI right now. Please try again later.";
-      aiAction = 'general_chat';
+    console.error('Error with Gemini:', error);
+    aiText = "Sorry, I'm having trouble. Try again later.";
   }
 
-  // Final guarantee: Ensure aiText is never empty before returning
-  if (!aiText) {
-      console.warn("aiText is still empty after all logic, defaulting to generic message.");
-      aiText = "I'm not sure how to respond to that. Can you ask me something else?";
-      aiAction = 'general_chat';
-  }
-
-  console.log("--- generateChatResponse finished. Final AiResponse: ---");
-  console.log("Final Text:", aiText);
-  console.log("Final Movies:", moviesToSuggest ? moviesToSuggest.map(m => m.name) : 'none');
-  console.log("Final Action:", aiAction);
-  console.log("----------------------------------\n");
+  // Log final response for debugging
+  console.log('Final AI response:', { text: aiText, movies: moviesToSuggest, aiAction });
 
   return { text: aiText, movies: moviesToSuggest, aiAction };
 };

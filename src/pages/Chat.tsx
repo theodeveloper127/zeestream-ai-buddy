@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { Send, Sparkles, User, ArrowLeft } from 'lucide-react';
+import { Send, Sparkles, User, ArrowLeft, Play, Download } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
+import { Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { generateChatResponse, getGeminiModel } from '@/lib/gemini'; // Import getGeminiModel
+import { generateChatResponse, getGeminiModel } from '@/lib/gemini';
 import { Movie } from '@/types/movie';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,114 +13,113 @@ import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { AuthModal } from '@/components/modals/AuthModal';
-import { ChatSession } from '@google/generative-ai'; // Import ChatSession type
+import { ChatSession } from '@google/generative-ai';
 
-// Simplified ChatMessage interface for session-based chat
 export interface ChatMessage {
-  id: string; // Unique ID for React key
+  id: string;
   content: string;
   isUser: boolean;
-  timestamp: Date; // Use Date object for local state
-  movies?: Movie[]; // Optional array of movies to display
+  timestamp: Date;
+  movies?: Movie[];
   aiAction?: 'search_movies' | 'general_chat' | 'identity_response';
 }
 
-const MAX_ANON_INTERACTIONS = 5; // Limit for non-logged-in users
+const MAX_ANON_INTERACTIONS = 5;
 
 const Chat = () => {
   const { user, loading: authLoading } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [aiInteractionCount, setAiInteractionCount] = useState(0); // Tracks AI interactions in current session
+  const [aiInteractionCount, setAiInteractionCount] = useState(0);
   const [movieContext, setMovieContext] = useState<Movie[]>([]);
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const [chatSession, setChatSession] = useState<ChatSession | null>(null); // State to hold the Gemini ChatSession
+  const [chatSession, setChatSession] = useState<ChatSession | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  // Determine the current interaction limit based on user login status
   const currentInteractionLimit = user ? Infinity : MAX_ANON_INTERACTIONS;
   const canSendMessages = !loading && aiInteractionCount < currentInteractionLimit;
 
-  // Initialize Gemini Chat Session on component mount
   useEffect(() => {
     try {
       const model = getGeminiModel();
-      // Start a new chat session. The history is managed internally by the SDK.
       setChatSession(model.startChat({
-        history: [], // You can pre-seed history if needed, otherwise empty for fresh session
-        generationConfig: {
-          maxOutputTokens: 500, // Adjust as needed
-        },
+        history: [],
+        generationConfig: { maxOutputTokens: 500 },
       }));
-      console.log("Gemini Chat Session started.");
     } catch (error) {
-      console.error("Failed to initialize Gemini model or start chat session:", error);
+      console.error("Failed to initialize Gemini:", error);
       toast({
         title: "AI Initialization Error",
-        description: "Could not start AI assistant. Check API key and network.",
+        description: "Could not start AI assistant.",
         variant: "destructive",
       });
     }
-  }, []); // Run only once on mount
+  }, []);
 
-  // Scroll to bottom of messages
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
-  // Load initial movie context and set welcome message
   useEffect(() => {
     const loadMovieContext = async () => {
       try {
         const moviesRef = collection(db, 'movies');
-        const q = query(moviesRef, orderBy('likes', 'desc'), limit(20));
+        const q = query(moviesRef, orderBy('uploadDate', 'desc'), limit(50));
         const querySnapshot = await getDocs(q);
         const movies: Movie[] = [];
         querySnapshot.forEach((doc) => {
-          movies.push({ id: doc.id, ...doc.data() } as Movie);
+          const data = doc.data();
+          if (data.releaseDate instanceof Timestamp) {
+            data.releaseDate = data.releaseDate.toDate();
+          }
+          if (data.uploadDate instanceof Timestamp) {
+            data.uploadDate = data.uploadDate.toDate();
+          }
+          movies.push({ id: doc.id, ...data } as Movie);
         });
         setMovieContext(movies);
       } catch (error) {
         console.error('Error loading movie context:', error);
+        toast({
+          title: "Error Loading Movies",
+          description: "Failed to load movie context. Try again later.",
+          variant: "destructive",
+        });
       }
     };
 
     loadMovieContext();
-
-    // Always start with a fresh welcome message on component mount
     setMessages([
       {
         id: 'welcome-1',
-        content: "Hi! I'm Zee AI, your personal movie assistant. I was developed by Rwandascratch developer teams. How can I help you find movies or answer questions about our collection?",
+        content: user?.displayName
+          ? `Hey ${user.displayName}! I'm Zee AI, your Zeestream movie assistant. Ask about movies or Zeestream!`
+          : "Hi! I'm Zee AI, your Zeestream movie assistant. Ask about movies or Zeestream!",
         isUser: false,
         timestamp: new Date(),
       },
     ]);
-  }, []); // Empty dependency array means this runs once on mount
+  }, [user]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    // Ensure chatSession is initialized before sending messages
     if (!chatSession) {
-        toast({
-            title: "AI Not Ready",
-            description: "AI assistant is still initializing. Please wait a moment.",
-            variant: "warning",
-        });
-        return;
+      toast({
+        title: "AI Not Ready",
+        description: "AI assistant is initializing. Please wait.",
+        variant: "warning",
+      });
+      return;
     }
-
-    // Prevent submission if loading, input is empty, or interaction limit reached
     if (!input.trim() || loading || !canSendMessages) {
       if (!canSendMessages && !loading) {
         toast({
           title: "Interaction Limit Reached",
-          description: `You've reached the maximum ${MAX_ANON_INTERACTIONS} interactions for this session. Please log in for unlimited chat.`,
+          description: `Max ${MAX_ANON_INTERACTIONS} interactions reached. Please log in.`,
           variant: "destructive",
         });
       }
@@ -134,54 +134,40 @@ const Chat = () => {
       timestamp: new Date(),
     };
 
-    // Add user message to local state immediately
     setMessages(prev => [...prev, newUserMessage]);
     setInput('');
     setLoading(true);
 
     try {
-      // Call generateChatResponse, passing the chatSession
-      const aiResponse = await generateChatResponse(userMessageContent, movieContext, chatSession);
-      
-      if (aiResponse.text) { 
-        const newAiMessage: ChatMessage = {
-          id: (Date.now() + 1).toString(),
-          content: aiResponse.text,
-          isUser: false,
-          timestamp: new Date(),
-          movies: aiResponse.movies,
-          aiAction: aiResponse.aiAction,
-        };
+      const aiResponse = await generateChatResponse(userMessageContent, movieContext, chatSession, user?.displayName);
+      console.log('AI response received:', aiResponse); // Debug log
 
-        setMessages(prev => [...prev, newAiMessage]);
-        setAiInteractionCount(prev => prev + 1);
+      const newAiMessage: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        content: aiResponse.text, // Only the friendly text
+        isUser: false,
+        timestamp: new Date(),
+        movies: aiResponse.movies || [], // Ensure movies array is defined
+        aiAction: aiResponse.aiAction,
+      };
 
-        setTimeout(() => {
-          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-        }, 100);
-      } else {
-        console.warn("generateChatResponse returned an empty text response.");
-        toast({
-          title: "No AI Response",
-          description: "The AI didn't provide a response. Please try again or rephrase.",
-          variant: "warning",
-        });
-      }
-
+      setMessages(prev => [...prev, newAiMessage]);
+      setAiInteractionCount(prev => prev + 1);
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
     } catch (error) {
       console.error('Error generating response:', error);
-      const errorMessageContent = "I'm sorry, I'm having trouble processing your request right now. Please try again later.";
-      const errorAiMessage: ChatMessage = {
+      const errorMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
-        content: errorMessageContent,
+        content: "Sorry, I'm having trouble. Try again later.",
         isUser: false,
         timestamp: new Date(),
       };
-      setMessages(prev => [...prev, errorAiMessage]);
-      
+      setMessages(prev => [...prev, errorMessage]);
       toast({
         title: "Error",
-        description: "Failed to get response from AI assistant",
+        description: "Failed to get AI response.",
         variant: "destructive",
       });
     } finally {
@@ -193,7 +179,32 @@ const Chat = () => {
     navigate(`/watch/${movie.slug}`);
   };
 
-  // Show loading state if auth or chat session is still processing
+  const handlePlayClick = (movie: Movie, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (movie.watchUrl) {
+      window.location.href = movie.watchUrl;
+    } else {
+      toast({
+        title: "No Watch URL",
+        description: "This movie is not available to watch yet.",
+        variant: "warning",
+      });
+    }
+  };
+
+  const handleDownloadClick = (movie: Movie, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (movie.downloadUrl) {
+      window.location.href = movie.downloadUrl;
+    } else {
+      toast({
+        title: "No Download URL",
+        description: "This movie is not available for download yet.",
+        variant: "warning",
+      });
+    }
+  };
+
   if (authLoading || !chatSession) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -206,11 +217,10 @@ const Chat = () => {
     <>
       <Helmet>
         <title>Zee AI Assistant - Zeestream</title>
-        <meta name="description" content="Chat with Zee AI assistant to discover movies and get recommendations" />
+        <meta name="description" content="Chat with Zee AI to discover movies on Zeestream" />
       </Helmet>
 
       <div className="h-screen flex flex-col bg-background">
-        {/* Header */}
         <div className="border-b border-border p-4">
           <div className="container mx-auto flex items-center space-x-4">
             <Button
@@ -235,7 +245,6 @@ const Chat = () => {
           </div>
         </div>
 
-        {/* Messages */}
         <div className="flex-1 overflow-y-auto custom-scrollbar">
           <div className="container mx-auto p-4 space-y-4">
             {messages.map((message) => (
@@ -274,7 +283,6 @@ const Chat = () => {
                         <p className="whitespace-pre-wrap">{message.content}</p>
                       </div>
 
-                      {/* Movie Cards */}
                       {message.movies && message.movies.length > 0 && (
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-2">
                           {message.movies.map((movie) => (
@@ -284,11 +292,31 @@ const Chat = () => {
                               onClick={() => handleMovieClick(movie)}
                             >
                               <CardContent className="p-3">
-                                <img
-                                  src={movie.thumbnailUrl}
-                                  alt={movie.name}
-                                  className="w-full aspect-[2/3] object-cover rounded mb-2"
-                                />
+                                <div className="relative">
+                                  <img
+                                    src={movie.thumbnailUrl}
+                                    alt={movie.name}
+                                    className="w-full aspect-[2/3] object-cover rounded mb-2"
+                                  />
+                                  <div className="absolute top-2 right-2 flex space-x-2">
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="bg-black bg-opacity-50 rounded-full"
+                                      onClick={(e) => handlePlayClick(movie, e)}
+                                    >
+                                      <Play className="w-5 h-5 text-white" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="bg-black bg-opacity-50 rounded-full"
+                                      onClick={(e) => handleDownloadClick(movie, e)}
+                                    >
+                                      <Download className="w-5 h-5 text-white" />
+                                    </Button>
+                                  </div>
+                                </div>
                                 <h4 className="font-medium text-sm truncate">{movie.name}</h4>
                                 <p className="text-xs text-muted-foreground">{movie.category}</p>
                                 <div className="flex items-center justify-between mt-1">
@@ -333,17 +361,14 @@ const Chat = () => {
           </div>
         </div>
 
-        {/* Input area or limit messages */}
         <div className="border-t border-border p-4">
           <div className="container mx-auto">
-            {/* Conditional rendering for input field and login/limit messages */}
             {user ? (
-              // Case: User is logged in (unlimited chat)
               <form onSubmit={handleSubmit} className="flex space-x-2">
                 <Input
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  placeholder="Ask me about movies or anything!"
+                  placeholder="Ask about movies or Zeestream!"
                   disabled={loading}
                   className="flex-1"
                 />
@@ -352,15 +377,13 @@ const Chat = () => {
                 </Button>
               </form>
             ) : (
-              // Case: User is NOT logged in
               <>
                 {canSendMessages ? (
-                  // Anonymous user, still within limit - can type and send
                   <form onSubmit={handleSubmit} className="flex space-x-2">
                     <Input
                       value={input}
                       onChange={(e) => setInput(e.target.value)}
-                      placeholder={`Ask me about movies (${MAX_ANON_INTERACTIONS - aiInteractionCount} questions left)`}
+                      placeholder={`Ask about movies (${MAX_ANON_INTERACTIONS - aiInteractionCount} questions left)`}
                       disabled={loading}
                       className="flex-1"
                     />
@@ -369,17 +392,15 @@ const Chat = () => {
                     </Button>
                   </form>
                 ) : (
-                  // Anonymous user, limit reached - input hidden
                   <div className="text-center py-4">
                     <p className="text-muted-foreground mb-4">
                       You've used all {MAX_ANON_INTERACTIONS} questions for this session.
                     </p>
                   </div>
                 )}
-                {/* Always show login/register button for anonymous users, regardless of limit */}
                 <div className="text-center mt-4">
                   <p className="text-muted-foreground mb-2">
-                    Sign in or register for unlimited chat and personalized experience.
+                    Sign in for unlimited chat and personalized experience.
                   </p>
                   <Button onClick={() => setShowAuthModal(true)} className="btn-stream">
                     Login / Register
@@ -391,10 +412,8 @@ const Chat = () => {
         </div>
       </div>
 
-      {/* Auth Modal */}
       <AuthModal open={showAuthModal} onOpenChange={setShowAuthModal} />
     </>
   );
 };
-
 export default Chat;

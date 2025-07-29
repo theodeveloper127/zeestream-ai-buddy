@@ -1,14 +1,15 @@
 import React from 'react';
 import { Movie } from '@/types/movie';
-import { MovieCard } from './MovieCard';
+import { MovieCard } from './MovieCard'; // Assuming MovieCard is in the same directory
 
 interface MovieGridProps {
   movies: Movie[];
   onAuthRequired: () => void;
   loading?: boolean;
+  onDownloadClick: (url: string | undefined, name: string) => void;
 }
 
-export const MovieGrid: React.FC<MovieGridProps> = ({ movies, onAuthRequired, loading }) => {
+export const MovieGrid: React.FC<MovieGridProps> = ({ movies, onAuthRequired, loading, onDownloadClick }) => {
   if (loading) {
     return (
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
@@ -40,6 +41,7 @@ export const MovieGrid: React.FC<MovieGridProps> = ({ movies, onAuthRequired, lo
           key={movie.id}
           movie={movie}
           onAuthRequired={onAuthRequired}
+          onDownloadClick={onDownloadClick}
         />
       ))}
     </div>
