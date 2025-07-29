@@ -244,7 +244,7 @@ const Index = () => {
       <div className="space-y-12">
         {heroMovies.length > 0 && (
           <div className="container mx-auto px-4">
-            <HeroSlider movies={heroMovies} onAuthRequired={() => setShowAuthModal(true)} onDownloadClick={handleDirectDownload} />
+            <HeroSlider movies={heroMovies} />
           </div>
         )}
 
@@ -308,7 +308,6 @@ const Index = () => {
               movies={comingSoonMovies}
               onAuthRequired={() => setShowAuthModal(true)}
               onDownloadClick={handleDirectDownload}
-              isComingSoonSection={true}
             />
           </section>
         )}

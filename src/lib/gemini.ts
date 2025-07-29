@@ -21,11 +21,24 @@ You are Zee AI, the helpful movie assistant for Zeestream, developed by Rwandasc
 
 Capabilities:
 1. **Identity/Greeting**: For queries like "who are you", "what is Zeestream", or greetings ("hi"), respond naturally about Zeestream. Example: "Hi [userName]! I'm Zee AI, your Zeestream movie assistant. Ask about our platform or movies!"
-2. **Movie Search**: For movie queries (e.g., "funny sci-fi movie with aliens from 2000s", "movies starting with theo", "coming soon movies", "about theogened"), filter or sort the provided movie JSON based on keywords (genres, themes, actors, decades, title prefix, comingSoon status, or specific titles). Return:
-   - A friendly message (e.g., "Here are some sci-fi comedies!" or "Here's what I know about 'theogened':").
-   - A list of matching movie names (e.g., ["theogened", "theogeneg"]).
-   Do NOT return JSON. Use the movie JSON below to find matches. If no matches, suggest up to 50 recent movies (sorted by uploadDate descending) or say no matches were found (e.g., for comingSoon if none exist).
-3. **General Conversation**: For non-movie Zeestream queries (e.g., "how does Zeestream work"), respond naturally without referencing movies unless asked. Ask follow-up questions if input is vague (e.g., "Any specific genres you like?").
+2. **Movie Search**: For movie queries (e.g., "action movies", "comedy from 2020", "movies with high rating", "series about adventure", "horror movies", "romance films"), analyze the provided movie JSON and return:
+   - A friendly, conversational message explaining what you found
+   - A JSON array of matching movie IDs in this exact format: {"movieIds": ["id1", "id2", "id3"]}
+   
+   Search criteria can include:
+   - Genre/Category (action, comedy, horror, romance, drama, etc.)
+   - Rating (high rated = rating >= 7, good = rating >= 5)
+   - Type (series = isSeries: true, movies = isSeries: false)
+   - Upload date (recent = newer uploadDate, old = older uploadDate)
+   - Coming soon status (comingSoon: true)
+   - Specific movie names or partial matches
+   - Description keywords
+   
+   If no exact matches found, suggest 5-10 popular movies (rating >= 6) as alternatives.
+   
+3. **General Conversation**: For non-movie Zeestream queries (e.g., "how does Zeestream work"), respond naturally without movieIds. Ask follow-up questions if input is vague.
+
+IMPORTANT: Always respond with a friendly message. For movie searches, include {"movieIds": ["id1", "id2"]} in your response.
 
 Movie JSON:
 {movieDataForAI}
@@ -56,7 +69,7 @@ export const generateChatResponse = async (
     allMovies.push({ id: doc.id, ...data } as Movie);
   });
 
-  // Convert movies to JSON for Gemini
+  // Convert movies to JSON for Gemini with all necessary details
   const movieDataForAI = JSON.stringify(
     allMovies.map(movie => ({
       id: movie.id,
@@ -65,8 +78,8 @@ export const generateChatResponse = async (
       thumbnailUrl: movie.thumbnailUrl,
       type: movie.type,
       category: movie.category,
-      likes: movie.likes,
-      comments: movie.comments,
+      likes: movie.likes.length,
+      commentsCount: movie.comments.length,
       rating: movie.rating,
       uploadDate: movie.uploadDate.toISOString(),
       description: movie.description,
@@ -85,7 +98,7 @@ export const generateChatResponse = async (
 
   const fullPrompt = `${SYSTEM_INSTRUCTION.replace('{movieDataForAI}', movieDataForAI)}
 User question: ${userMessage}
-Respond with a friendly message and, for movie queries, a list of matching movie names (e.g., ["theogened", "theogeneg"]). Do NOT return JSON. Use [userName] for ${userName || 'user'}.`;
+Use [userName] for ${userName || 'user'}.`;
 
   try {
     const result = await chatSession.sendMessage(fullPrompt);
@@ -95,61 +108,42 @@ Respond with a friendly message and, for movie queries, a list of matching movie
     // Log raw response for debugging
     console.log('Gemini raw response:', geminiRawText);
 
-    // Check if response is JSON (shouldn't happen, but handle as fallback)
-    if (geminiRawText.trim().startsWith('{')) {
-      console.warn('Unexpected JSON response from Gemini:', geminiRawText);
+    // Extract the main text (everything before any JSON)
+    const jsonMatch = geminiRawText.match(/\{"movieIds":\s*\[.*?\]\}/);
+    if (jsonMatch) {
+      // Movie search response
+      aiAction = 'search_movies';
+      aiText = geminiRawText.replace(jsonMatch[0], '').trim();
+      
       try {
-        const parsedResponse = JSON.parse(geminiRawText);
-        aiText = parsedResponse.text || 'Here are some movies you might like:';
-        aiAction = 'search_movies';
-
-        const suggestedMovieNames = (parsedResponse.movie_names || []).map((name: string) => name.toLowerCase());
-        moviesToSuggest = allMovies.filter(movie => suggestedMovieNames.includes(movie.name.toLowerCase())).slice(0, 50);
-
+        const movieData = JSON.parse(jsonMatch[0]);
+        const movieIds = movieData.movieIds || [];
+        
+        // Get movies by IDs
+        moviesToSuggest = allMovies.filter(movie => movieIds.includes(movie.id));
+        
+        // If no movies found by ID, provide suggestions
         if (moviesToSuggest.length === 0) {
-          aiText = parsedResponse.keywords?.comingSoon
-            ? "No upcoming movies found, but here are some recent ones!"
-            : "Couldn't find movies matching that, but here are some recent ones!";
-          moviesToSuggest = allMovies.sort((a, b) => b.uploadDate.getTime() - a.uploadDate.getTime()).slice(0, 50);
+          aiText = "I couldn't find exact matches, but here are some popular movies you might enjoy:";
+          moviesToSuggest = allMovies
+            .filter(movie => movie.rating >= 6)
+            .sort((a, b) => b.rating - a.rating)
+            .slice(0, 10);
         }
-      } catch (jsonError) {
-        console.error('Error parsing unexpected JSON response:', jsonError);
+      } catch (error) {
+        console.error('Error parsing movie IDs:', error);
         aiText = "Sorry, I couldn't process that movie request. Try asking for specific genres or titles!";
         aiAction = 'general_chat';
       }
     } else {
-      // Parse non-JSON response expecting friendly message and optional movie names
-      const lines = geminiRawText.split('\n').map(line => line.trim()).filter(line => line);
-      aiText = lines[0].replace('[userName]', userName || 'there') || 'Here are some movies you might like:';
+      // General conversation response
+      aiText = geminiRawText.replace('[userName]', userName || 'there');
       aiAction = 'general_chat';
 
-      // Check for movie names in subsequent lines (e.g., ["theogened", "theogeneg"])
-      let suggestedMovieNames: string[] = [];
-      const movieNamesMatch = geminiRawText.match(/\[".*?"/g);
-      if (movieNamesMatch) {
-        try {
-          suggestedMovieNames = JSON.parse(movieNamesMatch[0]).map((name: string) => name.toLowerCase());
-          aiAction = 'search_movies';
-        } catch (error) {
-          console.error('Error parsing movie names:', error);
-        }
-      }
-
-      if (suggestedMovieNames.length > 0) {
-        moviesToSuggest = allMovies
-          .filter(movie => suggestedMovieNames.includes(movie.name.toLowerCase()))
-          .slice(0, 50);
-      }
-
-      // Handle special cases (e.g., identity or comingSoon with no matches)
+      // Check if it's an identity response
       const lowerCaseAiText = aiText.toLowerCase();
       if (lowerCaseAiText.includes('zee ai') || lowerCaseAiText.includes('zeestream')) {
         aiAction = 'identity_response';
-      } else if (lowerCaseAiText.includes('coming soon') && moviesToSuggest?.length === 0) {
-        aiText = "I'm sorry, but I don't have information about upcoming releases on Zeestream. Try checking the Zeestream website or app directly.";
-      } else if (moviesToSuggest?.length === 0 && aiAction === 'search_movies') {
-        aiText = "Couldn't find movies matching that, but here are some recent ones!";
-        moviesToSuggest = allMovies.sort((a, b) => b.uploadDate.getTime() - a.uploadDate.getTime()).slice(0, 50);
       }
     }
 

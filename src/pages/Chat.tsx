@@ -111,7 +111,7 @@ const Chat = () => {
       toast({
         title: "AI Not Ready",
         description: "AI assistant is initializing. Please wait.",
-        variant: "warning",
+        variant: "destructive",
       });
       return;
     }
@@ -187,7 +187,7 @@ const Chat = () => {
       toast({
         title: "No Watch URL",
         description: "This movie is not available to watch yet.",
-        variant: "warning",
+        variant: "destructive",
       });
     }
   };
@@ -200,7 +200,7 @@ const Chat = () => {
       toast({
         title: "No Download URL",
         description: "This movie is not available for download yet.",
-        variant: "warning",
+        variant: "destructive",
       });
     }
   };
@@ -284,46 +284,81 @@ const Chat = () => {
                       </div>
 
                       {message.movies && message.movies.length > 0 && (
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
                           {message.movies.map((movie) => (
                             <Card
                               key={movie.id}
-                              className="cursor-pointer hover:shadow-md transition-shadow"
+                              className="cursor-pointer hover:shadow-lg transition-all duration-300 group overflow-hidden"
                               onClick={() => handleMovieClick(movie)}
                             >
-                              <CardContent className="p-3">
+                              <CardContent className="p-0">
                                 <div className="relative">
                                   <img
                                     src={movie.thumbnailUrl}
                                     alt={movie.name}
-                                    className="w-full aspect-[2/3] object-cover rounded mb-2"
+                                    className="w-full aspect-[16/9] object-cover group-hover:scale-105 transition-transform duration-300"
                                   />
-                                  <div className="absolute top-2 right-2 flex space-x-2">
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="bg-black bg-opacity-50 rounded-full"
-                                      onClick={(e) => handlePlayClick(movie, e)}
-                                    >
-                                      <Play className="w-5 h-5 text-white" />
-                                    </Button>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="bg-black bg-opacity-50 rounded-full"
-                                      onClick={(e) => handleDownloadClick(movie, e)}
-                                    >
-                                      <Download className="w-5 h-5 text-white" />
-                                    </Button>
+                                  
+                                  {/* Z-shaped overlay */}
+                                  <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-transparent to-primary/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                                  
+                                  {/* Action buttons */}
+                                  <div className="absolute top-2 right-2 flex flex-col space-y-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                                    {movie.watchUrl && (
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="bg-black/70 text-white hover:bg-primary rounded-full w-8 h-8"
+                                        onClick={(e) => handlePlayClick(movie, e)}
+                                        title="Watch Now"
+                                      >
+                                        <Play className="w-4 h-4" />
+                                      </Button>
+                                    )}
+                                    {movie.downloadUrl && (
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="bg-black/70 text-white hover:bg-primary rounded-full w-8 h-8"
+                                        onClick={(e) => handleDownloadClick(movie, e)}
+                                        title="Download"
+                                      >
+                                        <Download className="w-4 h-4" />
+                                      </Button>
+                                    )}
                                   </div>
+
+                                  {/* Movie type badge */}
+                                  <div className="absolute top-2 left-2">
+                                    <span className="px-2 py-1 bg-black/70 text-white text-xs rounded-full">
+                                      {movie.type === 'translated' ? 'Dubbed' : 'Original'}
+                                    </span>
+                                  </div>
+
+                                  {/* Coming soon badge */}
+                                  {movie.comingSoon && (
+                                    <div className="absolute bottom-2 left-2">
+                                      <span className="px-2 py-1 bg-primary text-primary-foreground text-xs rounded-full">
+                                        Coming Soon
+                                      </span>
+                                    </div>
+                                  )}
                                 </div>
-                                <h4 className="font-medium text-sm truncate">{movie.name}</h4>
-                                <p className="text-xs text-muted-foreground">{movie.category}</p>
-                                <div className="flex items-center justify-between mt-1">
-                                  <span className="text-xs">★ {movie.rating}</span>
-                                  <span className="text-xs text-muted-foreground">
-                                    {movie.type === 'translated' ? 'Dubbed' : 'Original'}
-                                  </span>
+                                
+                                <div className="p-3">
+                                  <h4 className="font-semibold text-sm truncate mb-1">{movie.name}</h4>
+                                  <p className="text-xs text-muted-foreground mb-2">{movie.category}</p>
+                                  <p className="text-xs text-muted-foreground line-clamp-2 mb-2">{movie.description}</p>
+                                  
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center space-x-1">
+                                      <span className="text-xs text-yellow-500">★</span>
+                                      <span className="text-xs font-medium">{movie.rating}</span>
+                                    </div>
+                                    <span className="text-xs text-muted-foreground">
+                                      {movie.isSeries ? 'Series' : 'Movie'}
+                                    </span>
+                                  </div>
                                 </div>
                               </CardContent>
                             </Card>
